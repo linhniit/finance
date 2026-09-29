@@ -1,0 +1,74 @@
+name: Cập nhật giá và xuất bản website
+on:
+  schedule:
+    - cron: '37 11 * * *' # 18:37 giờ Việt Nam; GitHub có thể chạy trễ.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'tests/**']
+permissions:
+  contents: read
+concurrency:
+  group: daily-market-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      update-result: ${{ steps.update.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Kiểm tra xử lý dữ liệu
+        run: python -m unittest discover -s tests -v
+      - name: Cập nhật từ nguồn
+        id: update
+        continue-on-error: true
+        run: python scripts/update_data.py
+      - name: Lưu lịch sử
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/market.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: cập nhật giá hằng ngày'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - name: Chuẩn bị website
+        run: |
+          mkdir -p _site/data
+          cp index.html styles.css app.js _site/
+          cp data/market.json _site/data/
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Xuất bản GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+  report:
+    needs: [build, deploy]
+    if: always() && needs.build.outputs.update-result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Báo nguồn chưa cập nhật đầy đủ
+        run: |
+          echo '::error::Một nguồn dữ liệu bị lỗi. Website vẫn giữ dữ liệu đã lưu; xem bước Cập nhật từ nguồn.'
+          exit 1
