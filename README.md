@@ -2,7 +2,7 @@
 
 Website tiếng Việt dành cho **linhniit**. Chạy trực tiếp trên GitHub Pages, không cần máy chủ hoặc API key.
 
-- Giá mua/bán vàng Mi Hồng: SJC và 999.
+- Giá mua/bán vàng Mi Hồng: 985 và 999.
 - Giá vàng quốc tế và tỷ giá USD/VND từ Markets Insider.
 - Các khoảng: 1 ngày, 1 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm.
 - Tooltip, phím mũi tên để xem từng mốc, bảng dữ liệu và bố cục điện thoại.
@@ -12,13 +12,13 @@ Website tiếng Việt dành cho **linhniit**. Chạy trực tiếp trên GitHub
 
 Nguồn gốc:
 
-- https://mihong.com/gia-vang-trong-nuoc
+- https://www.mihong.vn/gia-vang-trong-nuoc
 - https://markets.businessinsider.com/commodities/gold-price
 - https://markets.businessinsider.com/currencies/usd-vnd
 
 Liên kết USD/VND đã được sửa từ liên kết giá vàng trùng trong yêu cầu sang trang cặp tiền của cùng nhà cung cấp.
 
-Mi Hồng: dùng API công khai mà trang nguồn sử dụng, `/v1/gold-prices`, với `market=domestic`, `goldCode=SJC|999`, `last=24h|1M|1y`. Dữ liệu `1M` là các mốc tổng hợp theo ngày; `1y` là các mốc tổng hợp theo tháng, không được giả định là giá đóng cửa. Mốc tháng chỉ bổ sung phần lịch sử trước mốc ngày sớm nhất. Biểu đồ và tooltip ghi rõ loại bản ghi. Đơn vị gốc VND/chỉ được giữ nguyên (1 lượng = 10 chỉ).
+Mi Hồng: dùng API công khai mà trang nguồn sử dụng, `/v1/gold-prices`, với `market=domestic`, `goldCode=985|999`, `last=24h|1M|1y`. Dữ liệu `1M` là các mốc tổng hợp theo ngày; `1y` là các mốc tổng hợp theo tháng, không được giả định là giá đóng cửa. Mốc tháng chỉ bổ sung phần lịch sử trước mốc ngày sớm nhất. Biểu đồ và tooltip ghi rõ loại bản ghi. Đơn vị gốc VND/chỉ được giữ nguyên (1 lượng = 10 chỉ).
 
 Markets Insider: đọc JSON nhúng `priceSection`, `historicalPrices` và đường dẫn lịch sử công khai do giao diện nguồn sử dụng. Lịch sử dùng `Close`. Giá mới nhất được ghi với thời điểm **thu thập** theo giờ Việt Nam, không giả định đó là thời điểm giao dịch. Ngày đóng cửa được giữ theo ngày do nguồn trả về. Một bản ghi thu thập có thể không nằm cùng ngày giao dịch với giá đóng cửa do khác múi giờ.
 

@@ -19,7 +19,7 @@ TZ = ZoneInfo('Asia/Ho_Chi_Minh')
 HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; DailyMarketDashboard/1.0)', 'Accept': 'application/json,text/html'}
 MIHONG = 'https://api.mihong.com/v1/gold-prices'
 BI = 'https://markets.businessinsider.com'
-GOLD_CODES = ['SJC', '999']
+GOLD_CODES = ['985', '999']
 
 def fetch(url, headers=None):
     for attempt in range(3):
@@ -77,7 +77,7 @@ def domestic(code, previous, now, current):
     latest = mh_point(next(r for r in current if r['code'] == code), 'snapshot')
     latest['collectedAt'] = now.isoformat()
     intraday = [mh_point(r, 'intraday') for r in api('24h')]
-    return {'name': 'Mi Hồng ' + code, 'source': 'https://mihong.com/gia-vang-trong-nuoc',
+    return {'name': 'Mi Hồng ' + code, 'source': 'https://www.mihong.vn/gia-vang-trong-nuoc',
             'unit': 'VND/chỉ', 'latest': latest,
             'history': merge_history(previous.get('history', []), daily + [latest], now),
             'monthly': merge_history(previous.get('monthly', []), monthly, now),
@@ -119,14 +119,17 @@ def update(previous, now):
     result = copy.deepcopy(previous)
     result.update({'schemaVersion': 1, 'attemptedAt': now.isoformat(), 'timezone': 'Asia/Ho_Chi_Minh',
                    'scheduledTime': '18:37', 'scheduleUtc': '37 11 * * *'})
-    markets = result.setdefault('markets', {})
+    active_keys = [*GOLD_CODES, 'gold', 'fx']
+    # Keep history only for the configured instruments; never relabel another gold code.
+    markets = {key: result.get('markets', {}).get(key, {}) for key in active_keys}
+    result['markets'] = markets
     failures = []
     current = None
     try:
         current = json.loads(fetch(MIHONG + '?market=domestic', {'x-market': 'mihong'}))
     except Exception as exc:
         print('Mi Hong current: ' + type(exc).__name__, file=sys.stderr)
-    for key in ['SJC', '999', 'gold', 'fx']:
+    for key in active_keys:
         old = markets.get(key, {})
         try:
             if key in GOLD_CODES:

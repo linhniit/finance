@@ -3,7 +3,7 @@ const DAY = 86400000;
 const ranges = {'1d':'1 ngày','1w':'1 tuần','1m':'1 tháng','3m':'3 tháng','6m':'6 tháng','1y':'1 năm'};
 const colors = {domestic:'#e5b964',gold:'#8daeff',fx:'#83ccb8'};
 const kinds = {snapshot:'Bản ghi khi thu thập',close:'Giá đóng cửa',source_day:'Mốc ngày tổng hợp từ nguồn',source_month:'Mốc tháng tổng hợp từ nguồn',intraday:'Giá trong ngày từ nguồn'};
-let payload, range = '1m', goldType = 'SJC';
+let payload, range = '1m', goldType = '985';
 const formats = {domestic:new Intl.NumberFormat('vi-VN',{maximumFractionDigits:0}),gold:new Intl.NumberFormat('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2}),fx:new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2})};
 const fmt = (value,id) => Number.isFinite(value) ? formats[id].format(value) : '—';
 const dateLabel = date => date.split('-').reverse().join('/');
