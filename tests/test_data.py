@@ -35,7 +35,7 @@ class DataTests(unittest.TestCase):
         self.assertEqual(result['markets']['985']['history'],prior['markets']['985']['history'])
         self.assertEqual(result['updatedAt'],prior['updatedAt'])
         self.assertEqual(result['markets']['985']['status'],'error')
-        self.assertEqual(len(failed),4)
+        self.assertEqual(len(failed),6)
         self.assertNotIn('status',prior['markets']['985'])
 
     def test_embedded_json_is_parsed_without_executing_scripts(self):
@@ -56,7 +56,7 @@ class DataTests(unittest.TestCase):
             requested_codes.add(code)
             return json.dumps([dict(next(row for row in current if row['code'] == code), dateTime='04/10/2026 18:15')])
         old = {'markets': {'SJC': {'history': [{'date': '2026-10-01', 'value': 99999999}]}}}
-        with patch.object(module, 'fetch', side_effect=source), patch.object(module, 'international', return_value={'history': [], 'status': 'ok'}):
+        with patch.object(module, 'fetch', side_effect=source), patch.object(module, 'international', return_value={'history': [], 'status': 'ok'}), patch.object(module, 'fed', return_value={'history': [], 'status': 'ok'}):
             result, failed = module.update(old, datetime(2026, 10, 5, 19, tzinfo=module.TZ))
         self.assertEqual(requested_codes, {'985', '999'})
         self.assertEqual(failed, [])
@@ -66,5 +66,52 @@ class DataTests(unittest.TestCase):
         self.assertEqual(gold['latest']['buy'], 13000000)
         self.assertTrue(all(point['value'] == 13200000 for point in gold['history']))
         self.assertIn('SJC', old['markets'])
+
+    def test_fred_keeps_zero_rates_skips_missing_and_excludes_future(self):
+        raw = 'observation_date,DFEDTARL,DFEDTARU\n2020-01-01,1,2\n2026-10-10,0,0.25\n2026-10-11,.,4\n2026-10-12,3.75,4\n2026-10-13,3.5,3.75\n'
+        points = module.fed_points(raw, datetime(2026,10,12,tzinfo=module.TZ))
+        self.assertEqual([p['date'] for p in points], ['2026-10-10','2026-10-12'])
+        self.assertEqual(points[0]['lower'], 0)
+        self.assertEqual(points[1]['value'], 4)
+
+    def test_fred_rejects_bad_schema_invalid_bounds_and_empty_history(self):
+        now = datetime(2026,10,12,tzinfo=module.TZ)
+        with self.assertRaises(ValueError): module.fed_points('date,rate\n2026-10-12,4', now)
+        for bounds in ['4,3.75','nan,4','3.75,inf','-1,0','.,4',',4']:
+            with self.assertRaises(ValueError):
+                module.fed_points('observation_date,DFEDTARL,DFEDTARU\n2026-10-12,' + bounds, now)
+
+    def test_fred_preserves_observation_date_and_flags_lag(self):
+        now = datetime(2026,10,12,tzinfo=module.TZ)
+        raw = 'observation_date,DFEDTARL,DFEDTARU\n2026-10-08,3.75,4\n'
+        with patch.object(module, 'fetch', return_value=raw): result = module.fed({}, now)
+        self.assertEqual(result['latest']['date'], '2026-10-08')
+        self.assertNotIn('time', result['latest'])
+        self.assertEqual(result['latest']['collectedAt'], now.isoformat())
+        self.assertEqual(result['status'], 'partial')
+
+    def test_oil_uses_wti_nymex_and_own_history(self):
+        quote = {'label':'Oil (WTI)','postTimePushText':'NYMEX','currentValue':93.66,'previousClose':91.85}
+        config = {'instrumentTypeName':'Valor','instrumentIdentifier':'1594836','currentStockMarket':'NMN'}
+        html = 'priceSection: ' + json.dumps(quote) + ', historicalPrices: ' + json.dumps(config)
+        with patch.object(module, 'fetch', side_effect=[html, json.dumps([{'Date':'10/09/26','Close':91.85}])]) as fetch:
+            result = module.international('oil', {}, datetime(2026,10,12,tzinfo=module.TZ))
+        self.assertTrue(fetch.call_args_list[0].args[0].endswith('/commodities/oil-price?type=wti'))
+        self.assertIn('/1594836/', fetch.call_args_list[1].args[0])
+        self.assertEqual(result['unit'], 'USD/thùng')
+        self.assertEqual(result['history'][0]['value'], 91.85)
+        with patch.object(module, 'fetch', return_value=html.replace('WTI', 'Brent')):
+            with self.assertRaises(ValueError): module.international('oil', {}, datetime(2026,10,12,tzinfo=module.TZ))
+
+    def test_fred_failure_does_not_block_other_sources_or_erase_history(self):
+        now = datetime(2026,10,12,tzinfo=module.TZ)
+        old_fed = {'history':[{'date':'2026-10-11','value':4,'lower':3.75}], 'lastSuccessAt':'2026-10-11T18:37:00+07:00'}
+        fresh = {'history':[], 'status':'ok', 'lastSuccessAt':now.isoformat()}
+        with patch.object(module,'fetch',return_value='[{}]'), patch.object(module,'domestic',return_value=fresh), patch.object(module,'international',return_value=fresh), patch.object(module,'fed',side_effect=ValueError('bad CSV')):
+            result, failures = module.update({'markets':{'fed':old_fed}}, now)
+        self.assertEqual(failures, ['fed'])
+        self.assertEqual(result['markets']['fed']['history'], old_fed['history'])
+        self.assertEqual(result['markets']['fed']['lastSuccessAt'], old_fed['lastSuccessAt'])
+        self.assertEqual(result['markets']['oil']['status'], 'ok')
 
 if __name__ == '__main__': unittest.main()

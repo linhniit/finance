@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fetch the same public data used by the requested source pages; no API keys."""
 import copy
+import csv
+import io
 import json
 import math
 import os
@@ -20,11 +22,18 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; DailyMarketDashboard/1.0)', '
 MIHONG = 'https://api.mihong.com/v1/gold-prices'
 BI = 'https://markets.businessinsider.com'
 GOLD_CODES = ['985', '999']
+INTERNATIONAL = {
+    'gold': ('/commodities/gold-price', 'Vàng quốc tế', 'USD/ounce troy'),
+    'fx': ('/currencies/usd-vnd', 'USD/VND', 'VND/USD'),
+    'oil': ('/commodities/oil-price?type=wti', 'Dầu WTI · NYMEX', 'USD/thùng'),
+}
+FRED = 'https://fred.stlouisfed.org'
 
 def fetch(url, headers=None):
     for attempt in range(3):
         try:
-            request = urllib.request.Request(url, headers={**HEADERS, **(headers or {})})
+            request_headers = {k: v for k, v in {**HEADERS, **(headers or {})}.items() if v is not None}
+            request = urllib.request.Request(url, headers=request_headers)
             with urllib.request.urlopen(request, timeout=40) as response:
                 return response.read().decode('utf-8')
         except Exception:
@@ -85,10 +94,12 @@ def domestic(code, previous, now, current):
             'status': 'ok', 'lastSuccessAt': now.isoformat()}
 
 def international(key, previous, now):
-    path = '/commodities/gold-price' if key == 'gold' else '/currencies/usd-vnd'
+    path, name, unit = INTERNATIONAL[key]
     html = fetch(BI + path)
     quote = embedded_json(html, 'priceSection')
     config = embedded_json(html, 'historicalPrices')
+    if key == 'oil' and ('WTI' not in quote.get('label', '') or quote.get('postTimePushText') != 'NYMEX'):
+        raise ValueError('Expected WTI quote on NYMEX')
     start = now.date() - timedelta(days=370)
     # English month names are stable regardless of machine locale.
     months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May.', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.']
@@ -107,19 +118,54 @@ def international(key, previous, now):
               'collectedAt': now.isoformat(), 'sourceClock': quote.get('time'),
               'value': positive(quote['currentValue']), 'kind': 'snapshot',
               'previousClose': positive(quote['previousClose'])}
-    result = {'name': 'Vàng quốc tế' if key == 'gold' else 'USD/VND',
-              'source': BI + path, 'unit': 'USD/ounce troy' if key == 'gold' else 'VND/USD',
+    result = {'name': name, 'source': BI + path, 'unit': unit,
               'latest': latest, 'history': merge_history(previous.get('history', []), history + [latest], now),
               'intraday': [], 'monthly': [], 'status': 'partial' if warning else 'ok',
               'lastSuccessAt': now.isoformat()}
     if warning: result['warning'] = warning
     return result
 
+def fed_points(raw, now):
+    rows = csv.DictReader(io.StringIO(raw.lstrip('\ufeff')))
+    if not {'observation_date', 'DFEDTARL', 'DFEDTARU'}.issubset(rows.fieldnames or []):
+        raise ValueError('FRED CSV columns changed')
+    points = []
+    for row in rows:
+        date = datetime.strptime(row['observation_date'], '%Y-%m-%d').date()
+        if not now.date() - timedelta(days=400) <= date <= now.date():
+            continue
+        if any(row[key] in ('', '.') for key in ('DFEDTARL', 'DFEDTARU')):
+            continue
+        lower, upper = float(row['DFEDTARL']), float(row['DFEDTARU'])
+        # Zero is a valid target rate; missing observations are not zero.
+        if not all(math.isfinite(v) for v in (lower, upper)) or not 0 <= lower <= upper:
+            raise ValueError('Invalid FRED target range')
+        points.append({'date': date.isoformat(), 'lower': lower, 'value': upper, 'kind': 'fed_target'})
+    if not points:
+        raise ValueError('Empty FRED target rate history')
+    return sorted(points, key=lambda p: p['date'])
+
+def fed(previous, now):
+    # Open-ended export covering the initial year; trim the rolling window locally.
+    raw = fetch(FRED + '/graph/fredgraph.csv?id=DFEDTARL,DFEDTARU&cosd=2025-10-01',
+                {'User-Agent': 'Mozilla/5.0', 'Accept': None})
+    points = fed_points(raw, now)
+    latest = {**points[-1], 'collectedAt': now.isoformat()}
+    stale = (now.date() - datetime.strptime(latest['date'], '%Y-%m-%d').date()).days > 3
+    result = {'name': 'Lãi suất mục tiêu Fed', 'source': FRED + '/series/DFEDTARU',
+              'lowerSource': FRED + '/series/DFEDTARL', 'unit': '%/năm', 'latest': latest,
+              'history': merge_history(previous.get('history', []), points, now),
+              'intraday': [], 'monthly': [], 'status': 'partial' if stale else 'ok',
+              'lastSuccessAt': now.isoformat()}
+    if stale:
+        result['warning'] = 'Nguồn FRED chưa có quan sát mới trong hơn 3 ngày.'
+    return result
+
 def update(previous, now):
     result = copy.deepcopy(previous)
     result.update({'schemaVersion': 1, 'attemptedAt': now.isoformat(), 'timezone': 'Asia/Ho_Chi_Minh',
                    'scheduledTime': '18:37', 'scheduleUtc': '37 11 * * *'})
-    active_keys = [*GOLD_CODES, 'gold', 'fx']
+    active_keys = [*GOLD_CODES, *INTERNATIONAL, 'fed']
     # Keep history only for the configured instruments; never relabel another gold code.
     markets = {key: result.get('markets', {}).get(key, {}) for key in active_keys}
     result['markets'] = markets
@@ -135,6 +181,8 @@ def update(previous, now):
             if key in GOLD_CODES:
                 if not current: raise ValueError('Missing Mi Hong current data')
                 fresh = domestic(key, old, now, current)
+            elif key == 'fed':
+                fresh = fed(old, now)
             else:
                 fresh = international(key, old, now)
             markets[key] = fresh
