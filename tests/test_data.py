@@ -1,7 +1,7 @@
 import importlib.util
 import json
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -67,28 +67,8 @@ class DataTests(unittest.TestCase):
         self.assertTrue(all(point['value'] == 13200000 for point in gold['history']))
         self.assertIn('SJC', old['markets'])
 
-    def test_fred_keeps_zero_rates_skips_missing_and_excludes_future(self):
-        raw = 'observation_date,DFEDTARL,DFEDTARU\n2020-01-01,1,2\n2026-10-10,0,0.25\n2026-10-11,.,4\n2026-10-12,3.75,4\n2026-10-13,3.5,3.75\n'
-        points = module.fed_points(raw, datetime(2026,10,12,tzinfo=module.TZ))
-        self.assertEqual([p['date'] for p in points], ['2026-10-10','2026-10-12'])
-        self.assertEqual(points[0]['lower'], 0)
-        self.assertEqual(points[1]['value'], 4)
 
-    def test_fred_rejects_bad_schema_invalid_bounds_and_empty_history(self):
-        now = datetime(2026,10,12,tzinfo=module.TZ)
-        with self.assertRaises(ValueError): module.fed_points('date,rate\n2026-10-12,4', now)
-        for bounds in ['4,3.75','nan,4','3.75,inf','-1,0','.,4',',4']:
-            with self.assertRaises(ValueError):
-                module.fed_points('observation_date,DFEDTARL,DFEDTARU\n2026-10-12,' + bounds, now)
 
-    def test_fred_preserves_observation_date_and_flags_lag(self):
-        now = datetime(2026,10,12,tzinfo=module.TZ)
-        raw = 'observation_date,DFEDTARL,DFEDTARU\n2026-10-08,3.75,4\n'
-        with patch.object(module, 'fetch', return_value=raw): result = module.fed({}, now)
-        self.assertEqual(result['latest']['date'], '2026-10-08')
-        self.assertNotIn('time', result['latest'])
-        self.assertEqual(result['latest']['collectedAt'], now.isoformat())
-        self.assertEqual(result['status'], 'partial')
 
     def test_oil_uses_wti_nymex_and_own_history(self):
         quote = {'label':'Oil (WTI)','postTimePushText':'NYMEX','currentValue':93.66,'previousClose':91.85}
@@ -103,39 +83,51 @@ class DataTests(unittest.TestCase):
         with patch.object(module, 'fetch', return_value=html.replace('WTI', 'Brent')):
             with self.assertRaises(ValueError): module.international('oil', {}, datetime(2026,10,12,tzinfo=module.TZ))
 
-    def test_fred_failure_does_not_block_other_sources_or_erase_history(self):
+    def test_fed_failure_does_not_block_other_sources_or_erase_history(self):
         now = datetime(2026,10,12,tzinfo=module.TZ)
         old_fed = {'history':[{'date':'2026-10-11','value':4,'lower':3.75}], 'lastSuccessAt':'2026-10-11T18:37:00+07:00'}
         fresh = {'history':[], 'status':'ok', 'lastSuccessAt':now.isoformat()}
-        with patch.object(module,'fetch',return_value='[{}]'), patch.object(module,'domestic',return_value=fresh), patch.object(module,'international',return_value=fresh), patch.object(module,'fed',side_effect=ValueError('bad CSV')):
+        with patch.object(module,'fetch',return_value='[{}]'), patch.object(module,'domestic',return_value=fresh), patch.object(module,'international',return_value=fresh), patch.object(module,'fed',side_effect=ValueError('bad policy table')):
             result, failures = module.update({'markets':{'fed':old_fed}}, now)
         self.assertEqual(failures, ['fed'])
         self.assertEqual(result['markets']['fed']['history'], old_fed['history'])
         self.assertEqual(result['markets']['fed']['lastSuccessAt'], old_fed['lastSuccessAt'])
         self.assertEqual(result['markets']['oil']['status'], 'ok')
 
-    def test_fred_page_fallback_pairs_dates_and_keeps_complete_history(self):
-        now = datetime(2026,10,12,tzinfo=module.TZ)
-        start = datetime(2025,10,12,tzinfo=module.TZ)
-        history = [{'date':(start+timedelta(days=i)).date().isoformat(), 'lower':3.5,'value':3.75,'kind':'fed_target'} for i in range(365)]
-        def page(code, rows):
-            return f'<title>Target ({code})</title><table id="recent-obs">' + ''.join(f'<tr><td>{date}:&nbsp;</td><td class="series-obs value">{value}</td></tr>' for date,value in rows) + '</table>'
-        lower = page('DFEDTARL',[('2026-10-12','3.75'),('2026-10-11','3.75')])
-        upper = page('DFEDTARU',[('2026-10-12','4.00'),('2026-10-11','4.00')])
-        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,upper]):
-            result = module.fed({'history':history},now)
+
+    @staticmethod
+    def policy_html(rows=''):
+        return "FOMC's target federal funds rate or range" + '<h4>2024</h4><div><table><thead>Level (%)</thead><tbody><tr><td>January 1</td><td>0</td><td>0</td><td>0-0.25</td></tr></tbody></table></div><h4>2026</h4><div><table><thead>Level (%)</thead><tbody>' + rows + '</tbody></table></div>'
+
+    def test_policy_applies_changes_on_effective_day_not_before(self):
+        rows = '<tr><td>October 10</td><td>25</td><td>0</td><td>3.75-4.00</td></tr><tr><td>October 14</td><td>25</td><td>0</td><td>4.00-4.25</td></tr>'
+        points = module.fed_policy_points(self.policy_html(rows), datetime(2026,10,13,2,tzinfo=module.TZ))
+        by_date = {p['date']:p for p in points}
+        self.assertEqual(by_date['2026-10-09']['lower'],0)
+        self.assertEqual(by_date['2026-10-09']['value'],0.25)
+        self.assertEqual(by_date['2026-10-10']['value'],4)
+        self.assertEqual(by_date['2026-10-11']['value'],4)  # Sunday, policy still in force.
+        self.assertEqual(points[-1]['date'],'2026-10-12')  # Current date in New York.
+        self.assertEqual(points[-1]['effectiveFrom'],'2026-10-10')
+        self.assertNotIn('2026-10-14',by_date)
+
+    def test_policy_rejects_bad_bounds_dates_and_incomplete_history(self):
+        now = datetime(2026,10,13,tzinfo=module.TZ)
+        for date,bounds in [('October 10','4-3.75'),('October 40','3.75-4'),('October 10','nan-4'),('October 10','-1-0')]:
+            html = self.policy_html(f'<tr><td>{date}</td><td>0</td><td>0</td><td>{bounds}</td></tr>')
+            with self.assertRaises(ValueError): module.fed_policy_points(html,now)
+        for html in ['changed source',self.policy_html().replace('<h4>2024</h4>','<h4>2026</h4>'),self.policy_html().replace('Level (%)','Other rate')]:
+            with self.assertRaises(ValueError): module.fed_policy_points(html,now)
+
+    def test_policy_collection_records_effective_date_separately(self):
+        now = datetime(2026,10,13,2,tzinfo=module.TZ)
+        with patch.object(module,'fetch',return_value=self.policy_html()): result = module.fed({},now)
         self.assertEqual(result['status'],'ok')
-        self.assertEqual(result['collectionMethod'],'recent_observations')
-        self.assertEqual(len(result['history']),366)
-        self.assertEqual(result['history'][-2]['value'],4)
+        self.assertEqual(result['source'],module.FED_POLICY)
         self.assertEqual(result['latest']['date'],'2026-10-12')
-        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,upper]):
-            limited = module.fed({},now)
-        self.assertEqual(limited['status'],'partial')
-        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,page('DFEDTARU',[('2026-10-11','4.00')])]):
-            mismatched = module.fed({'history':history},now)
-        self.assertEqual(mismatched['latest']['date'],'2026-10-11')
-        self.assertEqual(mismatched['status'],'partial')
-        with self.assertRaises(ValueError): module.fred_recent(lower,'DFEDTARU')
+        self.assertEqual(result['latest']['effectiveFrom'],'2024-01-01')
+        self.assertEqual(result['latest']['collectedAt'],now.isoformat())
+        self.assertNotIn('time',result['latest'])
+        self.assertTrue(all(p['kind']=='fed_policy' for p in result['history']))
 
 if __name__ == '__main__': unittest.main()

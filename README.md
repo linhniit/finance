@@ -4,7 +4,7 @@ Website tiếng Việt dành cho **linhniit**. Chạy trực tiếp trên GitHub
 
 - Giá mua/bán vàng Mi Hồng: 985 và 999.
 - Giá vàng quốc tế, tỷ giá USD/VND và dầu WTI trên NYMEX (New York) từ Markets Insider.
-- Sàn và trần lãi suất mục tiêu Fed từ FRED; nguồn gốc là Hội đồng Thống đốc Fed (FOMC).
+- Sàn và trần lãi suất mục tiêu Fed từ bảng quyết định FOMC của Hội đồng Thống đốc Fed.
 - Các khoảng: 1 ngày, 1 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm.
 - Tooltip, phím mũi tên để xem từng mốc, bảng dữ liệu và bố cục điện thoại.
 - GitHub Actions lấy dữ liệu mỗi ngày vào khoảng **18:37 giờ Việt Nam** (`37 11 * * *` UTC), lưu lịch sử vào Git và xuất bản lại website.
@@ -17,8 +17,7 @@ Nguồn gốc:
 - https://markets.businessinsider.com/commodities/gold-price
 - https://markets.businessinsider.com/currencies/usd-vnd
 - https://markets.businessinsider.com/commodities/oil-price?type=wti
-- https://fred.stlouisfed.org/series/DFEDTARL
-- https://fred.stlouisfed.org/series/DFEDTARU
+- https://www.federalreserve.gov/monetarypolicy/openmarket.htm
 
 Liên kết USD/VND đã được sửa từ liên kết giá vàng trùng trong yêu cầu sang trang cặp tiền của cùng nhà cung cấp.
 
@@ -30,7 +29,9 @@ Mục 1 ngày của Mi Hồng dùng các mốc trong ngày gần nhất do ngu�
 
 Dầu: dùng chuỗi WTI gắn nhãn NYMEX trên Markets Insider, đơn vị USD/thùng. Bộ cập nhật xác minh cả WTI và NYMEX trước khi lưu, tránh nhầm với Brent. Lịch sử lấy tối đa 370 ngày và được giữ cùng các lần thu thập trước. Giá tham chiếu của nguồn có thể chịu ảnh hưởng khi chuyển kỳ hạn hợp đồng; không phải giá bán lẻ xăng dầu trong nước.
 
-Fed: tải CSV công khai từ FRED cho hai chuỗi `DFEDTARL` (sàn) và `DFEDTARU` (trần). Đây là **biên độ mục tiêu federal funds rate**, không phải lãi suất liên ngân hàng thực tế (EFFR) hoặc lãi suất chiết khấu. Đơn vị %/năm; giữ đúng ngày có hiệu lực của nguồn và ghi riêng thời điểm thu thập. Nếu dịch vụ CSV hết thời gian chờ, bộ cập nhật dùng bảng quan sát gần nhất trên hai trang FRED chính thức và ghép đúng ngày với lịch sử đã lưu. Chỉ báo thành công đầy đủ khi dữ liệu còn phủ liên tục một năm; không tự điền ngày bị thiếu. Hai đường bậc thang không nội suy lãi suất giữa các ngày. Mục 1 ngày hiển thị biên độ của ngày quan sát gần nhất, không gán giờ giao dịch giả. Thay đổi trong kỳ được tính từ trần, theo điểm cơ bản (1 điểm cơ bản = 0,01 điểm phần trăm). Bỏ qua các ngày thiếu một trong hai biên, nhưng chấp nhận mức 0%; báo chậm nếu nguồn chưa có quan sát mới hơn 3 ngày. Dữ liệu do Board of Governors of the Federal Reserve System (US) cung cấp qua FRED, Federal Reserve Bank of St. Louis.
+Fed: đọc bảng **FOMC's target federal funds rate or range** trên website chính thức của Hội đồng Thống đốc Fed. Đây là biên độ mục tiêu federal funds rate, không phải lãi suất liên ngân hàng thực tế (EFFR) hoặc lãi suất chiết khấu. Đơn vị %/năm. Mỗi mức có ngày bắt đầu hiệu lực và được giữ cho đến trước quyết định tiếp theo; mở rộng các khoảng hiệu lực này theo ngày để hiển thị biểu đồ bậc thang. Đây là mức chính sách áp dụng, không phải một giá giao dịch hoặc quan sát mới mỗi ngày. Dữ liệu dừng ở ngày hiện tại tại New York; quyết định công bố trước ngày hiệu lực chưa được áp dụng. Tooltip và chân biểu đồ ghi ngày hiệu lực, riêng thời điểm thu thập hiển thị theo giờ Việt Nam.
+
+Mục 1 ngày hiển thị biên độ áp dụng trong ngày gần nhất, không gán giờ giao dịch giả. Thay đổi trong kỳ được tính từ trần, theo điểm cơ bản (1 điểm cơ bản = 0,01 điểm phần trăm). Chấp nhận mức 0%; nếu cấu trúc bảng hoặc dữ liệu không hợp lệ, giữ bản thành công trước đó và báo lỗi. Bộ kiểm tra đối chiếu ngày hiệu lực, biên sàn/trần, thay đổi vào cuối tuần và ngày hiệu lực trong tương lai.
 
 Nguồn có thể thay đổi cấu trúc hoặc từ chối yêu cầu. Khi lỗi, dữ liệu thành công gần nhất được giữ lại, trạng thái lỗi được hiển thị và workflow báo thất bại **sau khi xuất bản dữ liệu còn lại**. Không có CAPTCHA hoặc cơ chế kiểm soát truy cập nào được vượt qua.
 

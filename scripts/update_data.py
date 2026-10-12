@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Fetch the same public data used by the requested source pages; no API keys."""
 import copy
-import csv
-import io
 from html import unescape
 import json
 import math
@@ -28,7 +26,7 @@ INTERNATIONAL = {
     'fx': ('/currencies/usd-vnd', 'USD/VND', 'VND/USD'),
     'oil': ('/commodities/oil-price?type=wti', 'Dầu WTI · NYMEX', 'USD/thùng'),
 }
-FRED = 'https://fred.stlouisfed.org'
+FED_POLICY = 'https://www.federalreserve.gov/monetarypolicy/openmarket.htm'
 
 def fetch(url, headers=None, *, attempts=3, timeout=40):
     for attempt in range(attempts):
@@ -126,84 +124,57 @@ def international(key, previous, now):
     if warning: result['warning'] = warning
     return result
 
-def fed_points(raw, now):
-    rows = csv.DictReader(io.StringIO(raw.lstrip('\ufeff')))
-    if not {'observation_date', 'DFEDTARL', 'DFEDTARU'}.issubset(rows.fieldnames or []):
-        raise ValueError('FRED CSV columns changed')
-    points = []
-    for row in rows:
-        date = datetime.strptime(row['observation_date'], '%Y-%m-%d').date()
-        if not now.date() - timedelta(days=400) <= date <= now.date():
-            continue
-        if any(row[key] in ('', '.') for key in ('DFEDTARL', 'DFEDTARU')):
-            continue
-        lower, upper = float(row['DFEDTARL']), float(row['DFEDTARU'])
-        # Zero is a valid target rate; missing observations are not zero.
-        if not all(math.isfinite(v) for v in (lower, upper)) or not 0 <= lower <= upper:
-            raise ValueError('Invalid FRED target range')
-        points.append({'date': date.isoformat(), 'lower': lower, 'value': upper, 'kind': 'fed_target'})
-    if not points:
-        raise ValueError('Empty FRED target rate history')
-    return sorted(points, key=lambda p: p['date'])
-
-def fred_recent(html, code):
-    title = re.search(r'<title>(.*?)</title>', html, re.S)
-    table = re.search(r'<table\b[^>]*\bid=["\']recent-obs["\'][^>]*>(.*?)</table>', html, re.S)
-    if not title or code not in title[1] or not table:
-        raise ValueError('FRED observation page format changed: ' + code)
-    observations = {}
-    for row in re.findall(r'<tr\b[^>]*>(.*?)</tr>', table[1], re.S):
-        cells = [unescape(re.sub(r'<[^>]+>', '', cell)).strip()
-                 for cell in re.findall(r'<td\b[^>]*>(.*?)</td>', row, re.S)]
-        if len(cells) >= 2 and re.fullmatch(r'\d{4}-\d{2}-\d{2}:', cells[0]):
-            if cells[1] not in ('', '.'):
-                observations[cells[0][:-1]] = cells[1]
-    if not observations:
-        raise ValueError('No recent FRED observations: ' + code)
-    return observations
+def fed_policy_points(html, now):
+    if "FOMC's target federal funds rate or range" not in html:
+        raise ValueError('Federal Reserve policy page format changed')
+    tables = re.findall(r'<h4[^>]*>\s*(20\d{2})\s*</h4>\s*(?:<div[^>]*>\s*)?<table\b[^>]*>(.*?)</table>', html, re.S)
+    months = {name: i + 1 for i, name in enumerate('January February March April May June July August September October November December'.split())}
+    changes = {}
+    for year, table in tables:
+        if 'Level (%)' not in table:
+            raise ValueError('Missing Fed target range column')
+        body = re.search(r'<tbody[^>]*>(.*?)</tbody>', table, re.S)
+        if not body:
+            raise ValueError('Missing Fed target changes')
+        for row in re.findall(r'<tr\b[^>]*>(.*?)</tr>', body[1], re.S):
+            cells = [unescape(re.sub(r'<[^>]+>', '', cell)).strip()
+                     for cell in re.findall(r'<td\b[^>]*>(.*?)</td>', row, re.S)]
+            if len(cells) != 4:
+                raise ValueError('Invalid Fed policy row')
+            day = re.fullmatch(r'([A-Za-z]+)\s+(\d{1,2})\s*\*?', cells[0])
+            bounds = re.fullmatch(r'(\d+(?:\.\d+)?)(?:\s*[-–]\s*(\d+(?:\.\d+)?))?', cells[3])
+            if not day or not bounds:
+                raise ValueError('Invalid Fed date or target range')
+            date = datetime(int(year), months[day[1]], int(day[2])).date()
+            lower, upper = float(bounds[1]), float(bounds[2] or bounds[1])
+            if not all(math.isfinite(v) for v in (lower, upper)) or not 0 <= lower <= upper:
+                raise ValueError('Invalid Fed target bounds')
+            if date in changes:
+                raise ValueError('Duplicate Fed effective date')
+            changes[date] = {'lower': lower, 'value': upper, 'effectiveFrom': date.isoformat(), 'kind': 'fed_policy'}
+    # Policy levels remain in force until the next effective decision. Expand the
+    # published intervals by calendar day, stopping at today's date in New York.
+    end = now.astimezone(ZoneInfo('America/New_York')).date()
+    start = end - timedelta(days=400)
+    dates = sorted(date for date in changes if date <= end)
+    if not dates or dates[0] > start:
+        raise ValueError('Fed policy history does not cover the requested year')
+    points, index = [], 0
+    for offset in range((end - start).days + 1):
+        date = start + timedelta(days=offset)
+        while index + 1 < len(dates) and dates[index + 1] <= date:
+            index += 1
+        points.append({'date': date.isoformat(), **changes[dates[index]]})
+    return points
 
 def fed(previous, now):
-    headers = {'User-Agent': 'Mozilla/5.0', 'Accept': None}
-    recent_only = False
-    mismatched_dates = False
-    try:
-        # Open-ended export covering the initial year; trim the rolling window locally.
-        raw = fetch(FRED + '/graph/fredgraph.csv?id=DFEDTARL,DFEDTARU&cosd=2025-10-01',
-                    headers, attempts=1, timeout=15)
-        points = fed_points(raw, now)
-    except Exception as exc:
-        # The CSV service can time out on cloud runners while series pages still work.
-        # Only use dated observations published by FRED; never carry a rate forward.
-        print('FRED CSV unavailable; using official recent observations: ' + type(exc).__name__, file=sys.stderr)
-        lower = fred_recent(fetch(FRED + '/series/DFEDTARL', headers), 'DFEDTARL')
-        upper = fred_recent(fetch(FRED + '/series/DFEDTARU', headers), 'DFEDTARU')
-        dates = sorted(lower.keys() & upper.keys())
-        raw = 'observation_date,DFEDTARL,DFEDTARU\n' + '\n'.join(f'{date},{lower[date]},{upper[date]}' for date in dates)
-        points = fed_points(raw, now)
-        recent_only = True
-        mismatched_dates = max(lower) != max(upper)
-    history = merge_history(previous.get('history', []), points, now)
-    latest = {**points[-1], 'collectedAt': now.isoformat()}
-    stale = (now.date() - datetime.strptime(latest['date'], '%Y-%m-%d').date()).days > 3
-    try:
-        year_start = now.date().replace(year=now.year - 1)
-    except ValueError:  # Leap day.
-        year_start = now.date().replace(year=now.year - 1, day=28)
-    observed = {p['date'] for p in history}
-    last_date = datetime.strptime(latest['date'], '%Y-%m-%d').date()
-    complete_history = all((year_start + timedelta(days=i)).isoformat() in observed
-                           for i in range((last_date - year_start).days + 1))
-    partial = stale or mismatched_dates or (recent_only and not complete_history)
-    result = {'name': 'Lãi suất mục tiêu Fed', 'source': FRED + '/series/DFEDTARU',
-              'lowerSource': FRED + '/series/DFEDTARL', 'unit': '%/năm', 'latest': latest,
-              'history': history, 'collectionMethod': 'recent_observations' if recent_only else 'csv',
-              'intraday': [], 'monthly': [], 'status': 'partial' if partial else 'ok',
-              'lastSuccessAt': now.isoformat()}
-    if stale:
-        result['warning'] = 'Nguồn FRED chưa có quan sát mới trong hơn 3 ngày.'
-    elif partial:
-        result['warning'] = 'Đã lấy các quan sát FRED gần nhất; lịch sử hoặc ngày công bố của hai biên chưa đầy đủ.'
-    return result
+    html = fetch(FED_POLICY, {'User-Agent': 'Mozilla/5.0', 'Accept': None})
+    points = fed_policy_points(html, now)
+    return {'name': 'Lãi suất mục tiêu Fed', 'source': FED_POLICY, 'unit': '%/năm',
+            'latest': {**points[-1], 'collectedAt': now.isoformat()},
+            'history': merge_history(previous.get('history', []), points, now),
+            'intraday': [], 'monthly': [], 'status': 'ok',
+            'collectionMethod': 'official_policy_intervals', 'lastSuccessAt': now.isoformat()}
 
 def update(previous, now):
     result = copy.deepcopy(previous)

@@ -6,7 +6,7 @@ const marketIds = Object.keys(colors);
 const marketNames = {gold:'Vàng quốc tế',fx:'USD/VND',oil:'Dầu WTI · NYMEX',fed:'Lãi suất mục tiêu Fed'};
 const units = {domestic:'VND / chỉ',gold:'USD / ounce troy',fx:'VND / USD',oil:'USD / thùng',fed:'% / năm'};
 const marketName = id => id==='domestic'?'Mi Hồng '+goldType:marketNames[id];
-const kinds = {snapshot:'Bản ghi khi thu thập',close:'Giá đóng cửa',source_day:'Mốc ngày tổng hợp từ nguồn',source_month:'Mốc tháng tổng hợp từ nguồn',intraday:'Giá trong ngày từ nguồn',fed_target:'Biên độ mục tiêu có hiệu lực trong ngày'};
+const kinds = {snapshot:'Bản ghi khi thu thập',close:'Giá đóng cửa',source_day:'Mốc ngày tổng hợp từ nguồn',source_month:'Mốc tháng tổng hợp từ nguồn',intraday:'Giá trong ngày từ nguồn',fed_target:'Biên độ mục tiêu có hiệu lực trong ngày',fed_policy:'Biên độ theo quyết định FOMC'};
 let payload, range = '1m', goldType = '985';
 const formats = {domestic:new Intl.NumberFormat('vi-VN',{maximumFractionDigits:0}),gold:new Intl.NumberFormat('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2}),fx:new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2})};
 formats.oil = formats.fed = formats.gold;
@@ -65,7 +65,7 @@ function renderMarket(id,m){
   const outdated=freshnessTime && Date.now()-new Date(freshnessTime)>36*3600000;
   const status=m.status==='error'?'Nguồn tạm lỗi · ':m.status==='partial'?(id==='fed'?'Dữ liệu chưa đầy đủ · ':'Lịch sử chưa đầy đủ · '):outdated?'Dữ liệu cũ · ':'';
   const time=id==='domestic'?m.latest?.time:m.latest?.collectedAt;
-  $(id+'-status').textContent=status+(id==='fed'&&m.latest?`Ngày dữ liệu: ${dateLabel(m.latest.date)} · `:'')+(time?`${id==='domestic'?'Nguồn':'Ghi nhận'}: ${collectedLabel(time)}`:'Chưa có bản ghi');
+  $(id+'-status').textContent=status+(id==='fed'&&m.latest?`Hiệu lực từ: ${dateLabel(m.latest.effectiveFrom||m.latest.date)} · `:'')+(time?`${id==='domestic'?'Nguồn':'Ghi nhận'}: ${collectedLabel(time)}`:'Chưa có bản ghi');
   return p;
 }
 function renderChart(id,points,chosen){
@@ -120,7 +120,7 @@ function renderChart(id,points,chosen){
     current=Math.max(0,Math.min(points.length-1,i));const p=points[current],xx=x(times[current]),yy=y(p.value);
     cursor.setAttribute('visibility','visible');cursor.querySelector('line').setAttribute('x1',xx);cursor.querySelector('line').setAttribute('x2',xx);cursor.querySelector('circle').setAttribute('cx',xx);cursor.querySelector('circle').setAttribute('cy',yy);
     const time=isDay&&p.time?' · '+new Date(p.time).toLocaleTimeString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit'}):'';
-    tip.innerHTML=`<strong>${dateLabel(p.date)}${time}</strong>${id==='domestic'?'Bán: ':id==='fed'?'Trần: ':''}${fmt(p.value,id)} ${units[id]}${id==='domestic'?'<br>Mua: '+fmt(p.buy,id):id==='fed'?'<br>Sàn: '+fmt(p.lower,id)+' % / năm':''}<small>${escape(kinds[p.kind]||'Giá từ nguồn')}</small>`;
+    tip.innerHTML=`<strong>${dateLabel(p.date)}${time}</strong>${id==='domestic'?'Bán: ':id==='fed'?'Trần: ':''}${fmt(p.value,id)} ${units[id]}${id==='domestic'?'<br>Mua: '+fmt(p.buy,id):id==='fed'?'<br>Sàn: '+fmt(p.lower,id)+' % / năm':''}<small>${escape(kinds[p.kind]||'Giá từ nguồn')}${p.effectiveFrom?' · từ '+dateLabel(p.effectiveFrom):''}</small>`;
     tip.hidden=false;tip.style.left=Math.max(0,Math.min(xx+12,w-tip.offsetWidth))+'px';tip.style.top=Math.max(0,Math.min(yy-70,h-tip.offsetHeight-30))+'px';
   };
   host.onpointermove=e=>{const px=e.clientX-host.getBoundingClientRect().left;let best=0;times.forEach((t,i)=>{if(Math.abs(x(t)-px)<Math.abs(x(times[best])-px))best=i;});show(best);};
