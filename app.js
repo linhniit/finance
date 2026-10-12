@@ -63,7 +63,7 @@ function renderMarket(id,m){
   }else summary.textContent='Chưa có dữ liệu trong khoảng thời gian này.';
   const freshnessTime=id==='domestic'?m.latest?.time:m.lastSuccessAt;
   const outdated=freshnessTime && Date.now()-new Date(freshnessTime)>36*3600000;
-  const status=m.status==='error'?'Nguồn tạm lỗi · ':m.status==='partial'?(id==='fed'?'Quan sát nguồn chậm · ':'Lịch sử chưa đầy đủ · '):outdated?'Dữ liệu cũ · ':'';
+  const status=m.status==='error'?'Nguồn tạm lỗi · ':m.status==='partial'?(id==='fed'?'Dữ liệu chưa đầy đủ · ':'Lịch sử chưa đầy đủ · '):outdated?'Dữ liệu cũ · ':'';
   const time=id==='domestic'?m.latest?.time:m.latest?.collectedAt;
   $(id+'-status').textContent=status+(id==='fed'&&m.latest?`Ngày dữ liệu: ${dateLabel(m.latest.date)} · `:'')+(time?`${id==='domestic'?'Nguồn':'Ghi nhận'}: ${collectedLabel(time)}`:'Chưa có bản ghi');
   return p;

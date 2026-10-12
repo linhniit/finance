@@ -3,6 +3,7 @@
 import copy
 import csv
 import io
+from html import unescape
 import json
 import math
 import os
@@ -29,15 +30,15 @@ INTERNATIONAL = {
 }
 FRED = 'https://fred.stlouisfed.org'
 
-def fetch(url, headers=None):
-    for attempt in range(3):
+def fetch(url, headers=None, *, attempts=3, timeout=40):
+    for attempt in range(attempts):
         try:
             request_headers = {k: v for k, v in {**HEADERS, **(headers or {})}.items() if v is not None}
             request = urllib.request.Request(url, headers=request_headers)
-            with urllib.request.urlopen(request, timeout=40) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 return response.read().decode('utf-8')
         except Exception:
-            if attempt == 2:
+            if attempt == attempts - 1:
                 raise
             time.sleep(2 ** attempt)
 
@@ -145,20 +146,63 @@ def fed_points(raw, now):
         raise ValueError('Empty FRED target rate history')
     return sorted(points, key=lambda p: p['date'])
 
+def fred_recent(html, code):
+    title = re.search(r'<title>(.*?)</title>', html, re.S)
+    table = re.search(r'<table\b[^>]*\bid=["\']recent-obs["\'][^>]*>(.*?)</table>', html, re.S)
+    if not title or code not in title[1] or not table:
+        raise ValueError('FRED observation page format changed: ' + code)
+    observations = {}
+    for row in re.findall(r'<tr\b[^>]*>(.*?)</tr>', table[1], re.S):
+        cells = [unescape(re.sub(r'<[^>]+>', '', cell)).strip()
+                 for cell in re.findall(r'<td\b[^>]*>(.*?)</td>', row, re.S)]
+        if len(cells) >= 2 and re.fullmatch(r'\d{4}-\d{2}-\d{2}:', cells[0]):
+            if cells[1] not in ('', '.'):
+                observations[cells[0][:-1]] = cells[1]
+    if not observations:
+        raise ValueError('No recent FRED observations: ' + code)
+    return observations
+
 def fed(previous, now):
-    # Open-ended export covering the initial year; trim the rolling window locally.
-    raw = fetch(FRED + '/graph/fredgraph.csv?id=DFEDTARL,DFEDTARU&cosd=2025-10-01',
-                {'User-Agent': 'Mozilla/5.0', 'Accept': None})
-    points = fed_points(raw, now)
+    headers = {'User-Agent': 'Mozilla/5.0', 'Accept': None}
+    recent_only = False
+    mismatched_dates = False
+    try:
+        # Open-ended export covering the initial year; trim the rolling window locally.
+        raw = fetch(FRED + '/graph/fredgraph.csv?id=DFEDTARL,DFEDTARU&cosd=2025-10-01',
+                    headers, attempts=1, timeout=15)
+        points = fed_points(raw, now)
+    except Exception as exc:
+        # The CSV service can time out on cloud runners while series pages still work.
+        # Only use dated observations published by FRED; never carry a rate forward.
+        print('FRED CSV unavailable; using official recent observations: ' + type(exc).__name__, file=sys.stderr)
+        lower = fred_recent(fetch(FRED + '/series/DFEDTARL', headers), 'DFEDTARL')
+        upper = fred_recent(fetch(FRED + '/series/DFEDTARU', headers), 'DFEDTARU')
+        dates = sorted(lower.keys() & upper.keys())
+        raw = 'observation_date,DFEDTARL,DFEDTARU\n' + '\n'.join(f'{date},{lower[date]},{upper[date]}' for date in dates)
+        points = fed_points(raw, now)
+        recent_only = True
+        mismatched_dates = max(lower) != max(upper)
+    history = merge_history(previous.get('history', []), points, now)
     latest = {**points[-1], 'collectedAt': now.isoformat()}
     stale = (now.date() - datetime.strptime(latest['date'], '%Y-%m-%d').date()).days > 3
+    try:
+        year_start = now.date().replace(year=now.year - 1)
+    except ValueError:  # Leap day.
+        year_start = now.date().replace(year=now.year - 1, day=28)
+    observed = {p['date'] for p in history}
+    last_date = datetime.strptime(latest['date'], '%Y-%m-%d').date()
+    complete_history = all((year_start + timedelta(days=i)).isoformat() in observed
+                           for i in range((last_date - year_start).days + 1))
+    partial = stale or mismatched_dates or (recent_only and not complete_history)
     result = {'name': 'Lãi suất mục tiêu Fed', 'source': FRED + '/series/DFEDTARU',
               'lowerSource': FRED + '/series/DFEDTARL', 'unit': '%/năm', 'latest': latest,
-              'history': merge_history(previous.get('history', []), points, now),
-              'intraday': [], 'monthly': [], 'status': 'partial' if stale else 'ok',
+              'history': history, 'collectionMethod': 'recent_observations' if recent_only else 'csv',
+              'intraday': [], 'monthly': [], 'status': 'partial' if partial else 'ok',
               'lastSuccessAt': now.isoformat()}
     if stale:
         result['warning'] = 'Nguồn FRED chưa có quan sát mới trong hơn 3 ngày.'
+    elif partial:
+        result['warning'] = 'Đã lấy các quan sát FRED gần nhất; lịch sử hoặc ngày công bố của hai biên chưa đầy đủ.'
     return result
 
 def update(previous, now):

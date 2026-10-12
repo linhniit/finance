@@ -1,7 +1,7 @@
 import importlib.util
 import json
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -113,5 +113,29 @@ class DataTests(unittest.TestCase):
         self.assertEqual(result['markets']['fed']['history'], old_fed['history'])
         self.assertEqual(result['markets']['fed']['lastSuccessAt'], old_fed['lastSuccessAt'])
         self.assertEqual(result['markets']['oil']['status'], 'ok')
+
+    def test_fred_page_fallback_pairs_dates_and_keeps_complete_history(self):
+        now = datetime(2026,10,12,tzinfo=module.TZ)
+        start = datetime(2025,10,12,tzinfo=module.TZ)
+        history = [{'date':(start+timedelta(days=i)).date().isoformat(), 'lower':3.5,'value':3.75,'kind':'fed_target'} for i in range(365)]
+        def page(code, rows):
+            return f'<title>Target ({code})</title><table id="recent-obs">' + ''.join(f'<tr><td>{date}:&nbsp;</td><td class="series-obs value">{value}</td></tr>' for date,value in rows) + '</table>'
+        lower = page('DFEDTARL',[('2026-10-12','3.75'),('2026-10-11','3.75')])
+        upper = page('DFEDTARU',[('2026-10-12','4.00'),('2026-10-11','4.00')])
+        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,upper]):
+            result = module.fed({'history':history},now)
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual(result['collectionMethod'],'recent_observations')
+        self.assertEqual(len(result['history']),366)
+        self.assertEqual(result['history'][-2]['value'],4)
+        self.assertEqual(result['latest']['date'],'2026-10-12')
+        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,upper]):
+            limited = module.fed({},now)
+        self.assertEqual(limited['status'],'partial')
+        with patch.object(module,'fetch',side_effect=[TimeoutError(),lower,page('DFEDTARU',[('2026-10-11','4.00')])]):
+            mismatched = module.fed({'history':history},now)
+        self.assertEqual(mismatched['latest']['date'],'2026-10-11')
+        self.assertEqual(mismatched['status'],'partial')
+        with self.assertRaises(ValueError): module.fred_recent(lower,'DFEDTARU')
 
 if __name__ == '__main__': unittest.main()

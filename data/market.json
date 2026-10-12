@@ -10146,7 +10146,7 @@
         "lower": 3.75,
         "value": 4.0,
         "kind": "fed_target",
-        "collectedAt": "2026-10-13T02:40:30.011269+07:00"
+        "collectedAt": "2026-10-13T02:47:21.890106+07:00"
       },
       "history": [
         {
@@ -12412,12 +12412,12 @@
           "kind": "fed_target"
         }
       ],
+      "collectionMethod": "recent_observations",
       "intraday": [],
       "monthly": [],
-      "status": "error",
-      "lastSuccessAt": "2026-10-13T02:40:30.011269+07:00",
-      "warning": "Chưa lấy được dữ liệu mới từ nguồn. Đang hiển thị bản ghi thành công gần nhất."
+      "status": "ok",
+      "lastSuccessAt": "2026-10-13T02:47:21.890106+07:00"
     }
   },
-  "updatedAt": "2026-10-13T02:41:59.510818+07:00"
+  "updatedAt": "2026-10-13T02:47:21.890106+07:00"
 }
