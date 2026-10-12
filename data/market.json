@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "attemptedAt": "2026-10-13T02:47:45.581949+07:00",
+  "attemptedAt": "2026-10-13T02:53:49.382143+07:00",
   "timezone": "Asia/Ho_Chi_Minh",
   "scheduledTime": "18:37",
   "scheduleUtc": "37 11 * * *",
@@ -15,7 +15,7 @@
         "value": 13100000.0,
         "buy": 12900000.0,
         "kind": "snapshot",
-        "collectedAt": "2026-10-13T02:47:45.581949+07:00"
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00"
       },
       "history": [
         {
@@ -276,7 +276,7 @@
           "value": 13100000.0,
           "buy": 12900000.0,
           "kind": "snapshot",
-          "collectedAt": "2026-10-13T02:47:45.581949+07:00"
+          "collectedAt": "2026-10-13T02:53:49.382143+07:00"
         }
       ],
       "monthly": [
@@ -1033,7 +1033,7 @@
         }
       ],
       "status": "ok",
-      "lastSuccessAt": "2026-10-13T02:47:45.581949+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     },
     "999": {
       "name": "Mi Hồng 999",
@@ -1045,7 +1045,7 @@
         "value": 14280000.0,
         "buy": 14130000.0,
         "kind": "snapshot",
-        "collectedAt": "2026-10-13T02:47:45.581949+07:00"
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00"
       },
       "history": [
         {
@@ -1348,7 +1348,7 @@
           "value": 14280000.0,
           "buy": 14130000.0,
           "kind": "snapshot",
-          "collectedAt": "2026-10-13T02:47:45.581949+07:00"
+          "collectedAt": "2026-10-13T02:53:49.382143+07:00"
         }
       ],
       "monthly": [
@@ -2105,7 +2105,7 @@
         }
       ],
       "status": "ok",
-      "lastSuccessAt": "2026-10-13T02:47:45.581949+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     },
     "gold": {
       "name": "Vàng quốc tế",
@@ -2113,10 +2113,10 @@
       "unit": "USD/ounce troy",
       "latest": {
         "date": "2026-10-13",
-        "time": "2026-10-13T02:47:45.581949+07:00",
-        "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-        "sourceClock": "03:41:34 PM",
-        "value": 4166.67,
+        "time": "2026-10-13T02:53:49.382143+07:00",
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+        "sourceClock": "03:52:01 PM",
+        "value": 4168.78,
         "kind": "snapshot",
         "previousClose": 4194.46
       },
@@ -5171,10 +5171,10 @@
         },
         {
           "date": "2026-10-13",
-          "time": "2026-10-13T02:47:45.581949+07:00",
-          "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-          "sourceClock": "03:41:34 PM",
-          "value": 4166.67,
+          "time": "2026-10-13T02:53:49.382143+07:00",
+          "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+          "sourceClock": "03:52:01 PM",
+          "value": 4168.78,
           "kind": "snapshot",
           "previousClose": 4194.46
         }
@@ -5182,7 +5182,7 @@
       "intraday": [],
       "monthly": [],
       "status": "ok",
-      "lastSuccessAt": "2026-10-13T02:47:45.581949+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     },
     "fx": {
       "name": "USD/VND",
@@ -5190,9 +5190,9 @@
       "unit": "VND/USD",
       "latest": {
         "date": "2026-10-13",
-        "time": "2026-10-13T02:47:45.581949+07:00",
-        "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-        "sourceClock": "03:35:00 PM",
+        "time": "2026-10-13T02:53:49.382143+07:00",
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+        "sourceClock": "03:43:00 PM",
         "value": 25937.0,
         "kind": "snapshot",
         "previousClose": 25888.6
@@ -8088,9 +8088,9 @@
         },
         {
           "date": "2026-10-13",
-          "time": "2026-10-13T02:47:45.581949+07:00",
-          "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-          "sourceClock": "03:35:00 PM",
+          "time": "2026-10-13T02:53:49.382143+07:00",
+          "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+          "sourceClock": "03:43:00 PM",
           "value": 25937.0,
           "kind": "snapshot",
           "previousClose": 25888.6
@@ -8099,7 +8099,7 @@
       "intraday": [],
       "monthly": [],
       "status": "ok",
-      "lastSuccessAt": "2026-10-13T02:47:45.581949+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     },
     "oil": {
       "name": "Dầu WTI · NYMEX",
@@ -8107,10 +8107,10 @@
       "unit": "USD/thùng",
       "latest": {
         "date": "2026-10-13",
-        "time": "2026-10-13T02:47:45.581949+07:00",
-        "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-        "sourceClock": "03:40:24 PM",
-        "value": 93.51,
+        "time": "2026-10-13T02:53:49.382143+07:00",
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+        "sourceClock": "03:47:51 PM",
+        "value": 93.39,
         "kind": "snapshot",
         "previousClose": 91.85
       },
@@ -10123,10 +10123,10 @@
         },
         {
           "date": "2026-10-13",
-          "time": "2026-10-13T02:47:45.581949+07:00",
-          "collectedAt": "2026-10-13T02:47:45.581949+07:00",
-          "sourceClock": "03:40:24 PM",
-          "value": 93.51,
+          "time": "2026-10-13T02:53:49.382143+07:00",
+          "collectedAt": "2026-10-13T02:53:49.382143+07:00",
+          "sourceClock": "03:47:51 PM",
+          "value": 93.39,
           "kind": "snapshot",
           "previousClose": 91.85
         }
@@ -10134,7 +10134,7 @@
       "intraday": [],
       "monthly": [],
       "status": "ok",
-      "lastSuccessAt": "2026-10-13T02:47:45.581949+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     },
     "fed": {
       "name": "Lãi suất mục tiêu Fed",
@@ -10146,7 +10146,7 @@
         "value": 4.0,
         "effectiveFrom": "2026-09-17",
         "kind": "fed_policy",
-        "collectedAt": "2026-10-13T02:53:13.522031+07:00"
+        "collectedAt": "2026-10-13T02:53:49.382143+07:00"
       },
       "history": [
         {
@@ -12954,8 +12954,8 @@
       "monthly": [],
       "status": "ok",
       "collectionMethod": "official_policy_intervals",
-      "lastSuccessAt": "2026-10-13T02:53:13.522031+07:00"
+      "lastSuccessAt": "2026-10-13T02:53:49.382143+07:00"
     }
   },
-  "updatedAt": "2026-10-13T02:53:13.522031+07:00"
+  "updatedAt": "2026-10-13T02:53:49.382143+07:00"
 }
